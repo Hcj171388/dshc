@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,21 +16,27 @@ import (
 // Config holds agent loop configuration
 type Config struct {
 	MaxTurns       int
+	MaxSteps       int
 	ToolTimeoutMs  int
 	Model          string
 	APIKey         string
 	BaseURL        string
 	Temperature    float64
+	MaxTokens      int
 	SystemPrompt   string
+	CompactionMode string // "none", "summary", "truncate"
 }
 
 // DefaultConfig returns default configuration
 func DefaultConfig() Config {
 	return Config{
-		MaxTurns:      20,
-		ToolTimeoutMs: 30000,
-		Temperature:   0.7,
-		SystemPrompt:  "You are a helpful assistant that can execute commands and manipulate files.",
+		MaxTurns:       30,
+		MaxSteps:       50,
+		ToolTimeoutMs:  30000,
+		Temperature:    0.7,
+		MaxTokens:      4096,
+		SystemPrompt:   "You are DeepSeek Harness, a helpful assistant that can execute commands and manipulate files.",
+		CompactionMode: "none",
 	}
 }
 
@@ -42,13 +49,13 @@ func SetConfig(cfg Config) {
 
 // Loop is the agent loop
 type Loop struct {
-	sessionID  session.SessionID
-	registry   *tools.Registry
-	store      session.Store
-	config     Config
-	abort      context.CancelFunc
-	mu         sync.Mutex
-	llmClient  *llm.Client
+	sessionID session.SessionID
+	registry  *tools.Registry
+	store     session.Store
+	config    Config
+	abort     context.CancelFunc
+	mu        sync.Mutex
+	llmClient *llm.Client
 }
 
 // NewLoop creates a new agent loop
@@ -58,9 +65,10 @@ func NewLoop(sid session.SessionID, reg *tools.Registry, store session.Store, cf
 	}
 	
 	llmCfg := llm.Config{
-		APIKey:  cfg.APIKey,
-		BaseURL: cfg.BaseURL,
-		Model:   cfg.Model,
+		APIKey:    cfg.APIKey,
+		BaseURL:   cfg.BaseURL,
+		Model:     cfg.Model,
+		MaxTokens: cfg.MaxTokens,
 	}
 	
 	return &Loop{
@@ -83,7 +91,7 @@ func (l *Loop) Abort() {
 
 // Run starts the agent loop with the given prompt
 func (l *Loop) Run(prompt string) <-chan *AgentEvent {
-	evChan := make(chan *AgentEvent, 128)
+	evChan := make(chan *AgentEvent, 256)
 	ctx, cancel := context.WithCancel(context.Background())
 	l.mu.Lock()
 	l.abort = cancel
@@ -101,24 +109,39 @@ func (l *Loop) Run(prompt string) <-chan *AgentEvent {
 			Type:      "user_message",
 			Payload:   prompt,
 		})
+		l.sendEvent(evChan, "message", map[string]string{
+			"role":    "user",
+			"content": prompt,
+		})
 
-		// Build messages history
+		// Build initial messages
 		messages := l.buildMessages(ctx)
+		
+		// Add system prompt
+		if l.config.SystemPrompt != "" {
+			messages = append([]llm.Message{{Role: "system", Content: l.config.SystemPrompt}}, messages...)
+		}
+
+		// Add user message
 		messages = append(messages, llm.Message{Role: "user", Content: prompt})
 
-		for turn := 0; turn < l.config.MaxTurns; turn++ {
+		turnCount := 0
+		stepCount := 0
+		
+		for turnCount < l.config.MaxTurns {
 			if ctx.Err() != nil {
 				break
 			}
-
-			response, err := l.processTurn(ctx, messages)
+			
+			turnCount++
+			l.sendEvent(evChan, "turn", map[string]int{"number": turnCount})
+			
+			// Process this turn
+			response, hasToolCalls, err := l.processTurn(ctx, messages)
 			if err != nil {
 				l.sendEvent(evChan, "error", map[string]string{"message": err.Error()})
 				break
 			}
-
-			// Send response event
-			l.sendEvent(evChan, "response", map[string]string{"text": response})
 			
 			// Store assistant response
 			l.store.AddEvent(&session.Event{
@@ -126,25 +149,33 @@ func (l *Loop) Run(prompt string) <-chan *AgentEvent {
 				Type:      "assistant_message",
 				Payload:   response,
 			})
-
-			// Check if we need another turn (tool calls)
-			if !responseHasToolCalls(response) {
+			l.sendEvent(evChan, "message", map[string]string{
+				"role":    "assistant",
+				"content": response,
+			})
+			
+			if !hasToolCalls {
+				break
+			}
+			
+			// Check max steps
+			stepCount++
+			if stepCount >= l.config.MaxSteps {
+				l.sendEvent(evChan, "error", map[string]string{"message": "max steps reached"})
 				break
 			}
 		}
-
-		l.sendEvent(evChan, "turn_complete", nil)
+		
+		l.sendEvent(evChan, "turn_complete", map[string]int{"turns": turnCount, "steps": stepCount})
 	}()
 	return evChan
 }
 
 func (l *Loop) buildMessages(ctx context.Context) []llm.Message {
-	messages := []llm.Message{
-		{Role: "system", Content: l.config.SystemPrompt},
-	}
+	messages := []llm.Message{}
 	
 	// Load previous events
-	events, err := l.store.GetEvents(string(l.sessionID), 0, 100)
+	events, err := l.store.GetEvents(string(l.sessionID), 0, 200)
 	if err != nil {
 		return messages
 	}
@@ -156,100 +187,131 @@ func (l *Loop) buildMessages(ctx context.Context) []llm.Message {
 		case "assistant_message":
 			messages = append(messages, llm.Message{Role: "assistant", Content: ev.Payload})
 		case "tool_call":
-			var tc ToolCallEvent
-			json.Unmarshal([]byte(ev.Payload), &tc)
-			messages = append(messages, llm.Message{Role: "assistant", Content: map[string]interface{}{
-				"tool_calls": []map[string]interface{}{
-					{"id": tc.ID, "type": "function", "function": map[string]interface{}{"name": tc.Name, "arguments": tc.Arguments}},
-				},
-			}})
-			messages = append(messages, llm.Message{Role: "tool", Content: map[string]interface{}{
-				"tool_call_id": tc.ID,
-				"content":      tc.Result,
-			}})
+			var tc ToolCallData
+			if json.Unmarshal([]byte(ev.Payload), &tc) == nil {
+				// Add assistant message with tool calls
+				messages = append(messages, llm.Message{Role: "assistant", Content: map[string]interface{}{
+					"tool_calls": []map[string]interface{}{
+						{
+							"id": tc.ID,
+							"type": "function",
+							"function": map[string]interface{}{
+								"name":      tc.Name,
+								"arguments": tc.Arguments,
+							},
+						},
+					},
+				}})
+				// Add tool result
+				messages = append(messages, llm.Message{Role: "tool", Content: map[string]interface{}{
+					"tool_call_id": tc.ID,
+					"content":      tc.Result,
+				}})
+			}
 		}
 	}
 	
 	return messages
 }
 
-func (l *Loop) processTurn(ctx context.Context, messages []llm.Message) (string, error) {
+func (l *Loop) processTurn(ctx context.Context, messages []llm.Message) (string, bool, error) {
 	// Get tools from registry
-	tools := l.registry.ToLLMTools()
+	llmTools := l.registry.ToLLMTools()
 	
 	// Call LLM
 	resp, err := l.llmClient.Call(ctx, llm.CallOptions{
 		Messages:    messages,
-		Tools:       toLLMTools(tools),
+		Tools:       toLLMTools(llmTools),
 		Temperature: l.config.Temperature,
+		MaxTokens:   l.config.MaxTokens,
 	})
 	if err != nil {
-		return "", fmt.Errorf("llm call: %w", err)
+		return "", false, fmt.Errorf("llm call: %w", err)
 	}
 	
 	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("empty response")
+		return "", false, fmt.Errorf("empty response")
 	}
 	
 	assistantMsg := resp.Choices[0].Message
 	
-	// Handle tool calls
-	if toolCalls, ok := assistantMsg.Content.(map[string]interface{})["tool_calls"].([]interface{}); ok && len(toolCalls) > 0 {
-		var texts []string
-		
-		for _, tc := range toolCalls {
-			call := tc.(map[string]interface{})
-			funcCall := call["function"].(map[string]interface{})
-			name := funcCall["name"].(string)
-			args := json.RawMessage(funcCall["arguments"].(string))
-			callID := call["id"].(string)
-			
-			// Send tool call event
-			l.sendEvent(nil, "tool_call", map[string]string{
-				"id":      callID,
-				"name":    name,
-				"args":    string(args),
-			})
-			
-			// Execute tool
-			result, err := l.registry.Call(name, args)
-			if err != nil {
-				result = fmt.Sprintf("Error: %v", err)
-			}
-			
-			// Store tool call event
-			l.store.AddEvent(&session.Event{
-				SessionID: string(l.sessionID),
-				Type:      "tool_call",
-				Payload: ToolCallEvent{
-					ID:      callID,
-					Name:    name,
-					Arguments: string(args),
-					Result:  result,
-				}.String(),
-			})
-			
-			// Add tool result to messages
-			messages = append(messages, llm.Message{Role: "assistant", Content: map[string]interface{}{
-				"tool_calls": []map[string]interface{}{
-					{"id": callID, "type": "function", "function": map[string]interface{}{"name": name, "arguments": string(args)}},
-				},
-			}})
-			messages = append(messages, llm.Message{Role: "tool", Content: map[string]interface{}{
-				"tool_call_id": callID,
-				"content":      result,
-			}})
-			
-			texts = append(texts, result)
-		}
-		
-		// Continue with tool results
-		return l.processTurn(ctx, messages)
+	// Check if response has tool calls
+	content, ok := assistantMsg.Content.(map[string]interface{})
+	if !ok {
+		text, _ := assistantMsg.Content.(string)
+		return text, false, nil
 	}
 	
-	// Return text response
-	text, _ := assistantMsg.Content.(string)
-	return text, nil
+	toolCalls, hasToolCalls := content["tool_calls"].([]interface{})
+	if !hasToolCalls || len(toolCalls) == 0 {
+		text, _ := content["text"].(string)
+		return text, false, nil
+	}
+	
+	// Execute tool calls
+	var toolResults []string
+	for _, tc := range toolCalls {
+		call := tc.(map[string]interface{})
+		funcCall := call["function"].(map[string]interface{})
+		name := funcCall["name"].(string)
+		argsStr := funcCall["arguments"].(string)
+		callID := call["id"].(string)
+		
+		args := json.RawMessage(argsStr)
+		
+		// Send tool call event
+		l.sendEvent(nil, "tool_call", map[string]string{
+			"id":      callID,
+			"name":    name,
+			"args":    argsStr,
+		})
+		
+		// Execute tool
+		result, err := l.registry.Call(name, args)
+		if err != nil {
+			result = fmt.Sprintf("Error: %v", err)
+		}
+		
+		toolResults = append(toolResults, result)
+		
+		// Store tool call event
+		l.store.AddEvent(&session.Event{
+			SessionID: string(l.sessionID),
+			Type:      "tool_call",
+			Payload: ToolCallData{
+				ID:        callID,
+				Name:      name,
+				Arguments: argsStr,
+				Result:    result,
+			}.String(),
+		})
+		
+		// Add tool result to messages
+		messages = append(messages, llm.Message{Role: "assistant", Content: map[string]interface{}{
+			"tool_calls": []map[string]interface{}{
+				{
+					"id": callID,
+					"type": "function",
+					"function": map[string]interface{}{
+						"name":      name,
+						"arguments": argsStr,
+					},
+				},
+			},
+		}})
+		messages = append(messages, llm.Message{Role: "tool", Content: map[string]interface{}{
+			"tool_call_id": callID,
+			"content":      result,
+		}})
+	}
+	
+	// Continue with tool results
+	nextResponse, _, err := l.processTurn(ctx, messages)
+	if err != nil {
+		return "", false, err
+	}
+	
+	return nextResponse, true, nil
 }
 
 func (l *Loop) sendEvent(ch chan<- *AgentEvent, typ string, payload interface{}) {
@@ -266,24 +328,55 @@ func (l *Loop) sendEvent(ch chan<- *AgentEvent, typ string, payload interface{})
 	}
 }
 
-// ToolCallEvent represents a tool call event
-type ToolCallEvent struct {
+// ToolCallData represents tool call information
+type ToolCallData struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
 	Result    string `json:"result"`
 }
 
-func (t ToolCallEvent) String() string {
+func (t ToolCallData) String() string {
 	data, _ := json.Marshal(t)
 	return string(data)
 }
 
-func responseHasToolCalls(response string) bool {
-	// This is a simplified check - in reality we'd parse the JSON response
-	return false
+// HasToolCalls checks if a response contains tool calls
+func HasToolCalls(content interface{}) bool {
+	m, ok := content.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	_, hasTools := m["tool_calls"]
+	return hasTools
 }
 
+// IsTextResponse checks if the response is pure text
+func IsTextResponse(content interface{}) bool {
+	_, isString := content.(string)
+	return isString
+}
+
+// FormatToolCalls formats tool calls for display
+func FormatToolCalls(content interface{}) string {
+	m, ok := content.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	toolCalls, ok := m["tool_calls"].([]interface{})
+	if !ok {
+		return ""
+	}
+	var parts []string
+	for _, tc := range toolCalls {
+		call := tc.(map[string]interface{})
+		funcCall := call["function"].(map[string]interface{})
+		parts = append(parts, fmt.Sprintf("%s(%s)", funcCall["name"], funcCall["arguments"]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// toLLMTools converts tools.LLMTool to llm.Tool
 func toLLMTools(tools []tools.LLMTool) []llm.Tool {
 	result := make([]llm.Tool, len(tools))
 	for i, t := range tools {

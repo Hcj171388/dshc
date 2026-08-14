@@ -19,6 +19,7 @@ type AgentConfig struct {
 	BaseURL        string  `json:"base_url"`
 	Temperature    float64 `json:"temperature"`
 	SystemPrompt   string  `json:"system_prompt"`
+	CompactionMode string  `json:"compaction_mode"`
 }
 
 type ToolsConfig struct {
