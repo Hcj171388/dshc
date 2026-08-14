@@ -5,6 +5,7 @@ go 1.25.0
 require github.com/mattn/go-sqlite3 v1.14.49
 
 require (
+	github.com/google/uuid v1.6.0 // indirect
 	golang.org/x/mobile v0.0.0-20260813181013-1960c775504c // indirect
 	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
