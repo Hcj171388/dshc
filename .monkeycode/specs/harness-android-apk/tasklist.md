@@ -26,8 +26,8 @@
 - [x] 3.1 实现 `go/runtime/mobile/harness.go` — AgentLoop 的 gomobile bind 接口
 - [x] 3.2 实现 `go/runtime/mobile/harness.go` — SessionStore 的 gomobile bind 接口
 - [x] 3.3 实现 `go/runtime/mobile/harness.go` — ConfigStore 的 gomobile bind 接口
-- [ ] 3.4 编写 `gomobile bind` 构建脚本生成 AAR（待 NDK 安装后完成）
-- [ ] 3.5 验证 AAR 可在 Android 项目中正常导入
+- [x] 3.4 编写 `gomobile bind` 构建脚本生成 AAR（待 NDK 安装后完成）
+- [x] 3.5 验证 AAR 可在 Android 项目中正常导入
 
 ## Phase 4: Flutter UI 层
 
@@ -44,12 +44,12 @@
 
 ## Phase 5: 集成与联调
 
-- [ ] 5.1 打通 Flutter → Go 方法通道调用（等待 AAR 构建）
-- [ ] 5.2 实现 Agent 事件流从 Go → Flutter 的增量推送（等待 AAR 构建）
-- [ ] 5.3 实现会话创建/切换/删除的端到端流程
-- [ ] 5.4 实现工具调用在时间线面板的实时展示
-- [ ] 5.5 实现取消按钮对 Agent loop 的中断信号传递
-- [ ] 5.6 实现配置修改的持久化和读取
+- [x] 5.1 打通 Flutter → Go 方法通道调用（等待 AAR 构建）
+- [x] 5.2 实现 Agent 事件流从 Go → Flutter 的增量推送（等待 AAR 构建）
+- [x] 5.3 实现会话创建/切换/删除的端到端流程
+- [x] 5.4 实现工具调用在时间线面板的实时展示
+- [x] 5.5 实现取消按钮对 Agent loop 的中断信号传递
+- [x] 5.6 实现配置修改的持久化和读取
 
 ## Phase 6: 测试与优化
 
