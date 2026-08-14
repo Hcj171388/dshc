@@ -101,6 +101,8 @@ func NewHarness(dataDir string) (*Harness, error) {
 		reg.Register(&tools.MathTool{})
 		reg.Register(&tools.RandomTool{})
 		reg.Register(&tools.UUIDTool{})
+		reg.Register(&tools.ZipTool{})
+		reg.Register(&tools.DiffTool{})
 		reg.Register(&tools.SkillTool{})
 		reg.Register(&tools.LSPTool{})
 		reg.Register(&tools.SkillTool{})
@@ -133,6 +135,8 @@ func NewHarness(dataDir string) (*Harness, error) {
 		reg.Register(&tools.MathTool{})
 		reg.Register(&tools.RandomTool{})
 		reg.Register(&tools.UUIDTool{})
+		reg.Register(&tools.ZipTool{})
+		reg.Register(&tools.DiffTool{})
 		reg.Register(&tools.SkillTool{})
 	
 	// Register todo tool
