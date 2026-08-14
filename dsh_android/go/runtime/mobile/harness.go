@@ -88,6 +88,9 @@ func NewHarness(dataDir string) (*Harness, error) {
 		reg.Register(&tools.CacheTool{})
 		reg.Register(&tools.ExtractTool{})
 		reg.Register(&tools.MkdirpTool{})
+		reg.Register(&tools.JsonQueryTool{})
+		reg.Register(&tools.XmlTool{})
+		reg.Register(&tools.CsvTool{})
 		reg.Register(&tools.SkillTool{})
 		reg.Register(&tools.LSPTool{})
 		reg.Register(&tools.SkillTool{})
@@ -107,6 +110,9 @@ func NewHarness(dataDir string) (*Harness, error) {
 		reg.Register(&tools.CacheTool{})
 		reg.Register(&tools.ExtractTool{})
 		reg.Register(&tools.MkdirpTool{})
+		reg.Register(&tools.JsonQueryTool{})
+		reg.Register(&tools.XmlTool{})
+		reg.Register(&tools.CsvTool{})
 		reg.Register(&tools.SkillTool{})
 	
 	// Register todo tool
