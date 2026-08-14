@@ -33,14 +33,23 @@ func NewHarness(dataDir string) (*Harness, error) {
 		return nil, err
 	}
 	reg := tools.NewRegistry()
+	
+	// Register bash tool
 	bashTool := &tools.BashTool{DefaultTimeoutMs: cfgStore.Get().Tools.Bash.TimeoutMs}
 	reg.Register(bashTool)
+	
+	// Register file system tools
 	fsTools := tools.NewFsTools(
 		cfgStore.Get().Tools.Fs.ReadLimit,
 		cfgStore.Get().Tools.Fs.ReadMaxBytes,
 		cfgStore.Get().Tools.Fs.ReadMaxLineLen,
 	)
 	fsTools.RegisterAll(reg)
+	
+	// Register web tools
+	webTools := tools.NewWebTools(30 * time.Second)
+	webTools.RegisterAll(reg)
+	
 	return &Harness{
 		store:          store,
 		configStore:    cfgStore,
@@ -105,13 +114,22 @@ func (h *Harness) RunAgent(sessionID, prompt string) (string, error) {
 		h.currentLoop.Abort()
 		h.currentLoop = nil
 	}
-	loop := agent.NewLoop(session.SessionID(sessionID), h.registry, h.store, agent.Config{
-		MaxTurns:      h.configStore.Get().Agent.MaxTurns,
-		ToolTimeoutMs: h.configStore.Get().Agent.ToolTimeoutMs,
-		MaxParallel:   h.configStore.Get().Agent.MaxParallel,
-	})
+	
+	cfg := h.configStore.Get()
+	loopCfg := agent.Config{
+		MaxTurns:      cfg.Agent.MaxTurns,
+		ToolTimeoutMs: cfg.Agent.ToolTimeoutMs,
+		Model:         cfg.Agent.Model,
+		APIKey:        cfg.Agent.APIKey,
+		BaseURL:       cfg.Agent.BaseURL,
+		Temperature:   cfg.Agent.Temperature,
+		SystemPrompt:  cfg.Agent.SystemPrompt,
+	}
+	
+	loop := agent.NewLoop(session.SessionID(sessionID), h.registry, h.store, loopCfg)
 	h.currentLoop = loop
 	h.mu.Unlock()
+	
 	evChan := make(chan *agent.AgentEvent, 64)
 	go func() {
 		events := loop.Run(prompt)
@@ -122,6 +140,7 @@ func (h *Harness) RunAgent(sessionID, prompt string) (string, error) {
 			}
 		}
 	}()
+	
 	listenerID := fmt.Sprintf("listener_%d", time.Now().UnixNano())
 	h.mu.Lock()
 	h.eventListeners[listenerID] = evChan

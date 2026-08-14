@@ -12,6 +12,19 @@ type Tool interface {
 	Execute(input json.RawMessage) (string, error)
 }
 
+// LLMTool represents a tool for the LLM API
+type LLMTool struct {
+	Type        string                 `json:"type"`
+	Function    LLMFunction            `json:"function"`
+}
+
+// LLMFunction represents a function for the LLM API
+type LLMFunction struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Parameters  map[string]interface{} `json:"parameters"`
+}
+
 type Registry struct {
 	tools map[string]Tool
 }
@@ -43,4 +56,20 @@ func (r *Registry) Call(name string, input json.RawMessage) (string, error) {
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
 	return t.Execute(input)
+}
+
+// ToLLMTools converts registered tools to LLM tool format
+func (r *Registry) ToLLMTools() []LLMTool {
+	tools := make([]LLMTool, 0, len(r.tools))
+	for _, t := range r.tools {
+		tools = append(tools, LLMTool{
+			Type: "function",
+			Function: LLMFunction{
+				Name:        t.Name(),
+				Description: t.Description(),
+				Parameters:  t.Schema(),
+			},
+		})
+	}
+	return tools
 }

@@ -12,14 +12,19 @@ type AppConfig struct {
 }
 
 type AgentConfig struct {
-	MaxTurns      int `json:"max_turns"`
-	ToolTimeoutMs int `json:"tool_timeout_ms"`
-	MaxParallel   int `json:"max_parallel"`
+	MaxTurns       int     `json:"max_turns"`
+	ToolTimeoutMs  int     `json:"tool_timeout_ms"`
+	Model          string  `json:"model"`
+	APIKey         string  `json:"api_key"`
+	BaseURL        string  `json:"base_url"`
+	Temperature    float64 `json:"temperature"`
+	SystemPrompt   string  `json:"system_prompt"`
 }
 
 type ToolsConfig struct {
 	Bash BashConfig `json:"bash"`
 	Fs   FsConfig   `json:"fs"`
+	Web  WebConfig  `json:"web"`
 }
 
 type BashConfig struct {
@@ -27,9 +32,13 @@ type BashConfig struct {
 }
 
 type FsConfig struct {
-	ReadLimit     int `json:"read_limit"`
-	ReadMaxBytes  int `json:"read_max_bytes"`
+	ReadLimit      int `json:"read_limit"`
+	ReadMaxBytes   int `json:"read_max_bytes"`
 	ReadMaxLineLen int `json:"read_max_line_len"`
+}
+
+type WebConfig struct {
+	TimeoutMs int `json:"timeout_ms"`
 }
 
 type Store struct {
@@ -58,20 +67,19 @@ func (s *Store) Save() error {
 	return os.WriteFile(s.path, data, 0644)
 }
 
-func (a *AgentConfig) ToAgentConfig() map[string]interface{} {
-	return map[string]interface{}{
-		"max_turns":      a.MaxTurns,
-		"tool_timeout_ms": a.ToolTimeoutMs,
-		"max_parallel":   a.MaxParallel,
-	}
-}
-
 func defaultConfig() AppConfig {
 	return AppConfig{
-		Agent: AgentConfig{MaxTurns: 20, ToolTimeoutMs: 30000, MaxParallel: 5},
+		Agent: AgentConfig{
+			MaxTurns:      20,
+			ToolTimeoutMs: 30000,
+			Model:         "deepseek-chat",
+			Temperature:   0.7,
+			SystemPrompt:  "You are a helpful assistant that can execute commands and manipulate files.",
+		},
 		Tools: ToolsConfig{
 			Bash: BashConfig{TimeoutMs: 30000},
 			Fs:   FsConfig{ReadLimit: 1000, ReadMaxBytes: 102400, ReadMaxLineLen: 10000},
+			Web:  WebConfig{TimeoutMs: 30000},
 		},
 	}
 }
