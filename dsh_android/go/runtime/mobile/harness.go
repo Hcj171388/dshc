@@ -49,6 +49,12 @@ func NewHarness(dataDir string) (*Harness, error) {
 	// Register web tools
 	webTools := tools.NewWebTools(30 * time.Second)
 	webTools.RegisterAll(reg)
+		
+		// Register terminal tool
+		reg.Register(&tools.TerminalTool{})
+		
+		// Register todo tool
+		reg.Register(&tools.TodoTool{})
 	
 	return &Harness{
 		store:          store,
