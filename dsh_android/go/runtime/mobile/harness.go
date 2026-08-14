@@ -72,8 +72,12 @@ func NewHarness(dataDir string) (*Harness, error) {
 		reg.Register(&tools.ACPTool{})
 		reg.Register(&tools.LSPTool{})
 		reg.Register(&tools.SkillTool{})
+		reg.Register(&tools.GoalTool{})
+		reg.Register(&tools.ContextTool{})
 		reg.Register(&tools.LSPTool{})
 		reg.Register(&tools.SkillTool{})
+		reg.Register(&tools.GoalTool{})
+		reg.Register(&tools.ContextTool{})
 	
 	// Register todo tool
 	reg.Register(&tools.TodoTool{})
