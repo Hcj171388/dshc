@@ -69,6 +69,11 @@ func NewHarness(dataDir string) (*Harness, error) {
 	
 	// Register terminal tool
 	reg.Register(&tools.TerminalTool{})
+		reg.Register(&tools.ACPTool{})
+		reg.Register(&tools.LSPTool{})
+		reg.Register(&tools.SkillTool{})
+		reg.Register(&tools.LSPTool{})
+		reg.Register(&tools.SkillTool{})
 	
 	// Register todo tool
 	reg.Register(&tools.TodoTool{})
