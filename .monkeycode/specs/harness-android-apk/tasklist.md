@@ -106,3 +106,10 @@
 - [x] 修复 APK 构建使用旧代码的问题
 - [x] 重新构建 APK，包含正确的 UI 代码
 - [x] APK 大小从 265MB 优化到 82MB
+
+### UI 重构 (v1.5.0)
+- [x] 修复 Flutter 编译错误（home_view VoidCallback/await、settings_view double类型、chat_view noturer属性、tool_call_card图标、timeline_list缺失import）
+- [x] 清理工作区中误建的默认 Flutter 计数器模板文件
+- [x] 重新构建多架构 APK（arm64-v8a 30MB, armeabi-v7a 28MB, x86_64 32MB）
+- [x] APK 上传至 GitHub Releases v1.5.0
+- [x] https://github.com/Hcj171388/dshc/releases/tag/v1.5.0
