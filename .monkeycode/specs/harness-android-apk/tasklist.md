@@ -89,3 +89,15 @@
 
 ### 下载
 - https://github.com/Hcj171388/dshc/releases/tag/v1.0.0
+
+### Bug 修复
+- [x] main.dart 使用默认计数器模板 → 替换为正确应用入口
+
+### UI 改进 (v1.3.0)
+- [x] 参考原项目重新设计完整 UI
+- [x] HomeView: 会话列表、空状态、新建会话按钮
+- [x] ChatView: 消息气泡、输入栏、执行状态指示器
+- [x] TimelineList: 执行历史面板
+- [x] ToolCallCard: 可展开的工具调用卡片
+- [x] MessageBubble: 用户/助手消息样式
+- [x] SettingsView: 分类设置页面
