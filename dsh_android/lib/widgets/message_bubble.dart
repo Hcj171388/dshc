@@ -8,20 +8,26 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.isEmpty) return const SizedBox.shrink();
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        padding: const EdgeInsets.all(12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-        decoration: BoxDecoration(
-          color: isUser ? Theme.of(context).primaryColor : Colors.grey[300],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          message,
-          style: TextStyle(
-            color: isUser ? Colors.white : Colors.black87,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isUser ? Theme.of(context).primaryColor : Colors.grey[200],
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            message,
+            style: TextStyle(
+              color: isUser ? Colors.white : Colors.black87,
+              fontSize: 15,
+              height: 1.4,
+            ),
           ),
         ),
       ),

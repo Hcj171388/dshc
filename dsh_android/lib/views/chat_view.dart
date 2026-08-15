@@ -6,7 +6,7 @@ import '../model/session.dart';
 import '../providers/session_provider.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/tool_call_card.dart';
-import 'timeline_panel.dart';
+import '../widgets/timeline_list.dart';
 
 class ChatView extends ConsumerStatefulWidget {
   final String sessionId;
@@ -22,11 +22,13 @@ class _ChatViewState extends ConsumerState<ChatView> {
   StreamSubscription<String>? _eventSub;
   bool _isRunning = false;
   String _lastListenerId = '';
+  bool _showTimeline = false;
 
   @override
   void initState() {
     super.initState();
     _loadInitialEvents();
+    _controller.addListener(_scrollToBottom);
   }
 
   Future<void> _loadInitialEvents() async {
@@ -36,16 +38,28 @@ class _ChatViewState extends ConsumerState<ChatView> {
     }
   }
 
+  void _scrollToBottom() {
+    if (_scrollCtrl.hasClients && !_isRunning) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_scrollCtrl.hasClients) {
+          _scrollCtrl.animateTo(
+            _scrollCtrl.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
   Future<void> _sendPrompt() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _isRunning) return;
     _controller.clear();
 
-    // Append user message locally
     final bridge = ref.read(bridgeProvider);
     final notifier = ref.read(sessionNotifierProvider(widget.sessionId).notifier);
 
-    // Start agent turn
     _isRunning = true;
     setState(() {});
     try {
@@ -58,7 +72,7 @@ class _ChatViewState extends ConsumerState<ChatView> {
           setState(() => _isRunning = false);
           _eventSub?.cancel();
           _eventSub = null;
-          notifier.loadEvents();
+          notifier.loadEvents().then((_) => _scrollToBottom());
         },
       );
     } catch (e) {
@@ -73,10 +87,7 @@ class _ChatViewState extends ConsumerState<ChatView> {
 
   void _handleAgentEvent(String eventJson, SessionNotifier notifier) {
     try {
-      final ev = jsonDecode(eventJson) as Map<String, dynamic>;
-      // Store event in session
-      // For now just reload
-      notifier.loadEvents();
+      notifier.loadEvents().then((_) => _scrollToBottom());
     } catch (_) {}
   }
 
@@ -90,6 +101,7 @@ class _ChatViewState extends ConsumerState<ChatView> {
   @override
   void dispose() {
     _eventSub?.cancel();
+    _controller.removeListener(_scrollToBottom);
     _controller.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -98,17 +110,31 @@ class _ChatViewState extends ConsumerState<ChatView> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(sessionNotifierProvider(widget.sessionId));
-    final showTimeline = ref.watch(configProvider).showTimeline;
+    final config = ref.watch(configProvider);
+    _showTimeline = config.showTimeline;
 
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(state.title.isNotEmpty ? state.title : 'Chat'),
+        title: Text(state.title.isNotEmpty ? state.title : 'New Conversation'),
+        backgroundColor: Colors.white,
+        elevation: 1,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
+          IconButton(
+            icon: Icon(_showTimeline ? Icons.timeline : Icons.timeline_outlined, color: Colors.black87),
+            onPressed: () {
+              setState(() => _showTimeline = !_showTimeline);
+              ref.read(configProvider.notifier).state = config.copyWith(showTimeline: !_showTimeline);
+            },
+          ),
           if (_isRunning)
             IconButton(
-              icon: const Icon(Icons.stop),
+              icon: const Icon(Icons.stop_circle, color: Colors.red),
               onPressed: _abort,
-              tooltip: 'Abort',
             ),
         ],
       ),
@@ -118,13 +144,43 @@ class _ChatViewState extends ConsumerState<ChatView> {
             child: state.isLoading && state.events.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : state.error != null
-                    ? Center(child: Text(state.error!))
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text(state.error!, style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 16),
+                            FilledButton(onPressed: () => state.notifier.loadEvents(), child: const Text('Retry')),
+                          ],
+                        ),
+                      )
                     : ListView(
                         controller: _scrollCtrl,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         children: [
-                          if (showTimeline)
-                            const TimelinePanel(sessionId: '', isLive: true),
+                          if (_showTimeline)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: TimelineList(sessionId: ''),
+                            ),
                           ...state.events.map((e) => _buildEvent(e)),
+                          if (_isRunning)
+                            const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text('Agent is thinking...', style: TextStyle(color: Colors.grey)),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
           ),
@@ -177,33 +233,54 @@ class _BuildInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, -2)),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: SafeArea(
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  hintText: 'Type a message...',
-                  border: OutlineInputBorder(),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(24),
                 ),
-                maxLines: 3,
-                minLines: 1,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => onSend(),
+                child: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: 'Send a message...',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  maxLines: 4,
+                  minLines: 1,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => onSend(),
+                ),
               ),
             ),
             const SizedBox(width: 8),
             isRunning
-                ? IconButton(
-                    icon: const Icon(Icons.stop, color: Colors.red),
-                    onPressed: onAbort,
+                ? CircleAvatar(
+                    radius: 22,
+                    backgroundColor: Colors.red,
+                    child: IconButton(
+                      icon: const Icon(Icons.stop, color: Colors.white, size: 20),
+                      onPressed: onAbort,
+                    ),
                   )
-                : IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: onSend,
+                : CircleAvatar(
+                    radius: 22,
+                    backgroundColor: Theme.of(context).primaryColor,
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      onPressed: onSend,
+                    ),
                   ),
           ],
         ),
