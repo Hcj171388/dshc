@@ -101,3 +101,8 @@
 - [x] ToolCallCard: 可展开的工具调用卡片
 - [x] MessageBubble: 用户/助手消息样式
 - [x] SettingsView: 分类设置页面
+
+### Bug 修复 (v1.4.0)
+- [x] 修复 APK 构建使用旧代码的问题
+- [x] 重新构建 APK，包含正确的 UI 代码
+- [x] APK 大小从 265MB 优化到 82MB
