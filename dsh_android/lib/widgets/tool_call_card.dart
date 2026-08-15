@@ -39,7 +39,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
       case 'web_fetch':
         return Icons.web;
       case 'git_command':
-        return Icons.git_merge;
+        return Icons.folder;
       case 'curl':
         return Icons.http;
       case 'code_runtime':
@@ -165,7 +165,7 @@ class _StatusDot extends StatelessWidget {
         color: color,
         shape: BoxShape.circle,
         boxShadow: isRunning
-            ? [BoxShadow(color: color, blurRadius: 6, spreadPercentage: 0.3)]
+            ? [BoxShadow(color: color, blurRadius: 6, spreadRadius: 3)]
             : null,
       ),
     );

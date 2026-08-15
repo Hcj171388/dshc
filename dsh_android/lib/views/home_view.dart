@@ -34,10 +34,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Rename Session'),
-        child: TextField(
+        content: TextField(
           autofocus: true,
           decoration: const InputDecoration(hintText: 'Enter new name'),
-          onChanged: (v) => {},
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -137,9 +136,9 @@ class _EmptyState extends StatelessWidget {
 
 class _SessionTile extends StatelessWidget {
   final SessionMeta session;
-  final VoidCallback onDelete;
-  final VoidCallback onArchive;
-  final VoidCallback onRename;
+  final Future<void> Function() onDelete;
+  final Future<void> Function() onArchive;
+  final Future<void> Function() onRename;
   final VoidCallback onTap;
 
   const _SessionTile({
@@ -167,9 +166,13 @@ class _SessionTile extends StatelessWidget {
       trailing: PopupMenuButton<String>(
         icon: Icon(Icons.more_vert, color: Colors.grey[600]),
         onSelected: (v) async {
-          if (v == 'delete') await onDelete();
-          else if (v == 'archive') await onArchive();
-          else if (v == 'rename') await onRename();
+          if (v == 'delete') {
+            await onDelete();
+          } else if (v == 'archive') {
+            await onArchive();
+          } else if (v == 'rename') {
+            await onRename();
+          }
         },
         itemBuilder: (_) => [
           const PopupMenuItem(value: 'rename', child: Text('Rename')),

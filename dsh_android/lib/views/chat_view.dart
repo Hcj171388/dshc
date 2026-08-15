@@ -152,7 +152,7 @@ class _ChatViewState extends ConsumerState<ChatView> {
                             const SizedBox(height: 16),
                             Text(state.error!, style: const TextStyle(color: Colors.red)),
                             const SizedBox(height: 16),
-                            FilledButton(onPressed: () => state.notifier.loadEvents(), child: const Text('Retry')),
+                            FilledButton(onPressed: () => ref.read(sessionNotifierProvider(widget.sessionId).notifier).loadEvents(), child: const Text('Retry')),
                           ],
                         ),
                       )

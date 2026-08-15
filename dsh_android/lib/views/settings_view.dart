@@ -73,7 +73,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                 max: 120,
                 divisions: 23,
                 labelSuffix: 's',
-                onChanged: (v) => setState(() => _toolTimeoutMs = v * 1000),
+                onChanged: (v) => setState(() => _toolTimeoutMs = (v * 1000).toInt()),
               ),
             ],
           ),
